@@ -1,0 +1,206 @@
+---
+title: "Build and deploy a stroke prediction model using R"
+date: "`r Sys.Date()`"
+output: html_document
+author: "Put your name!"
+---
+
+# About Data Analysis Report
+
+This RMarkdown file contains the report of the data analysis done for the project on building and deploying a stroke prediction model in R. It contains analysis such as data exploration, summary statistics and building the prediction models. The final report was completed on `r date()`. 
+
+**Data Description:**
+
+According to the World Health Organization (WHO) stroke is the 2nd leading cause of death globally, responsible for approximately 11% of total deaths.
+
+This data set is used to predict whether a patient is likely to get stroke based on the input parameters like gender, age, various diseases, and smoking status. Each row in the data provides relevant information about the patient.
+
+
+# Task One: Import data and data preprocessing
+
+## Load data and install packages
+
+```{r}
+# Install and load required libraries
+if (!require("tidyverse")) install.packages("tidyverse", dependencies = TRUE)
+if (!require("caret")) install.packages("caret", dependencies = TRUE)
+if (!require("data.table")) install.packages("data.table", dependencies = TRUE)
+if (!require("GGally")) install.packages("GGally", dependencies = TRUE)
+
+library(tidyverse)
+library(caret)
+library(data.table)
+library(GGally)
+```
+
+
+## Describe and explore the data
+
+```{r}
+# Load dataset
+data <- fread("healthcare-dataset-stroke-data.csv")
+
+# View structure and summary
+str(data)
+summary(data)
+
+# Handle missing values
+data <- data %>%
+  mutate_if(is.numeric, ~ifelse(is.na(.), median(., na.rm = TRUE), .))
+
+# Convert the outcome variable to a factor
+data$stroke <- as.factor(data$stroke)
+
+# Check the levels to ensure proper conversion
+levels(data$stroke) <- c("No", "Yes")
+
+# Convert categorical variables to factors
+data <- data %>%
+  mutate(across(where(is.character), as.factor))
+
+# Scale numeric columns
+setDT(data)
+numeric_cols <- names(data)[sapply(data, is.numeric)]
+data[, (numeric_cols) := lapply(.SD, scale), .SDcols = numeric_cols]
+
+set.seed(123)
+trainIndex <- createDataPartition(data$stroke, p = 0.8, list = FALSE)
+train_data <- data[trainIndex, ]
+test_data <- data[-trainIndex, ]
+
+```
+
+
+
+# Task Two: Build prediction models
+
+```{r}
+set.seed(123)
+
+
+logistic_model <- train(
+  stroke ~ ., 
+  data = train_data, 
+  method = "glm", 
+  family = "binomial", 
+  trControl = trainControl(method = "cv", number = 5)
+)
+summary(logistic_model)
+
+```
+
+```{r}
+
+```
+
+
+
+# Task Three: Evaluate and select prediction models
+
+```{r}
+set.seed(123)
+dt_model <- train(
+  stroke ~ ., 
+  data = train_data, 
+  method = "rpart", 
+  trControl = trainControl(method = "cv", number = 5)
+)
+print(dt_model$finalModel)
+rpart.plot::rpart.plot(dt_model$finalModel)
+
+```
+
+```{r}
+set.seed(123)
+svm_model <- train(
+  stroke ~ ., 
+  data = train_data, 
+  method = "svmRadial", 
+  preProcess = c("center", "scale"),
+  trControl = trainControl(method = "cv", number = 5)
+)
+summary(svm_model)
+
+```
+
+```{r}
+# Predictions and confusion matrices
+logistic_preds <- predict(logistic_model, test_data)
+dt_preds <- predict(dt_model, test_data)
+svm_preds <- predict(svm_model, test_data)
+
+# Evaluate performance
+logistic_cm <- confusionMatrix(logistic_preds, test_data$stroke)
+dt_cm <- confusionMatrix(dt_preds, test_data$stroke)
+svm_cm <- confusionMatrix(svm_preds, test_data$stroke)
+
+# Summarize metrics
+evaluation <- data.frame(
+  Model = c("Logistic Regression", "Decision Tree", "SVM"),
+  Accuracy = c(logistic_cm$overall["Accuracy"], dt_cm$overall["Accuracy"], svm_cm$overall["Accuracy"]),
+  Sensitivity = c(logistic_cm$byClass["Sensitivity"], dt_cm$byClass["Sensitivity"], svm_cm$byClass["Sensitivity"]),
+  Specificity = c(logistic_cm$byClass["Specificity"], dt_cm$byClass["Specificity"], svm_cm$byClass["Specificity"])
+)
+
+print(evaluation)
+
+if (!require("pROC")) install.packages("pROC", dependencies = TRUE)
+library(pROC)
+
+logistic_roc <- roc(test_data$stroke, as.numeric(predict(logistic_model, test_data, type = "prob")[,2]))
+svm_roc <- roc(test_data$stroke, as.numeric(predict(svm_model, test_data, type = "prob")[,2]))
+
+plot(logistic_roc, col = "red", main = "ROC Curves")
+plot(svm_roc, col = "blue", add = TRUE)
+legend("bottomright", legend = c("Logistic Regression", "SVM"), col = c("red", "blue"), lwd = 2)
+
+```
+
+
+# Task Four: Deploy the prediction model
+
+```{r}
+# Save the chosen model
+saveRDS(logistic_model, "stroke_prediction_model.rds")
+
+# Load the model
+loaded_model <- readRDS("stroke_prediction_model.rds")
+
+```
+
+
+
+
+# Task Five: Findings and Conclusions
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
